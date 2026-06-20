@@ -9,6 +9,7 @@ const searchBox = document.getElementById('search-box');
 const filterChipsContainer = document.getElementById('filter-chips-container');
 const lastFetchedTime = document.getElementById('last-fetched-time');
 const refreshBtn = document.getElementById('refresh-btn');
+const exportCsvBtn = document.getElementById('export-csv-btn');
 const floatingActionBar = document.getElementById('floating-action-bar');
 const selectedCountEl = document.getElementById('selected-count');
 const clearSelectionBtn = document.getElementById('clear-selection-btn');
@@ -204,6 +205,13 @@ function renderNotes() {
                     </svg>
                 </a>
                 <div class="card-actions">
+                    <button class="btn btn-secondary btn-sm copy-btn" title="Copy clean text to clipboard" style="padding: 0.4rem 0.75rem; font-size: 0.8rem; border-radius: var(--radius-sm);">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+                            <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+                        </svg>
+                        <span>Copy</span>
+                    </button>
                     <button class="btn btn-secondary btn-sm single-tweet-btn" style="padding: 0.4rem 0.75rem; font-size: 0.8rem; border-radius: var(--radius-sm);">
                         <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24">
                             <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
@@ -220,6 +228,18 @@ function renderNotes() {
         selectBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             toggleSelectNote(note.id);
+        });
+        
+        // Copy to clipboard click
+        const copyBtn = card.querySelector('.copy-btn');
+        copyBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            navigator.clipboard.writeText(note.content_text).then(() => {
+                showToast('Copied text to clipboard!');
+            }).catch(err => {
+                console.error('Failed to copy: ', err);
+                showToast('Failed to copy text.', 'error');
+            });
         });
         
         // Single card tweet button click
@@ -412,6 +432,57 @@ function submitTweet() {
     clearSelection();
 }
 
+// Export current updates to CSV
+function exportToCsv() {
+    const notesToExport = selectedNotes.size > 0 ? 
+        allNotes.filter(n => selectedNotes.has(n.id)) : 
+        filteredNotes;
+        
+    if (notesToExport.length === 0) {
+        showToast('No release notes available to export.', 'error');
+        return;
+    }
+    
+    const escapeCsv = (str) => {
+        if (str === null || str === undefined) return '';
+        let escaped = str.toString().replace(/"/g, '""');
+        if (escaped.includes(',') || escaped.includes('\n') || escaped.includes('"')) {
+            escaped = `"${escaped}"`;
+        }
+        return escaped;
+    };
+    
+    let csvRows = ['Date,Type,URL,Content'];
+    notesToExport.forEach(note => {
+        csvRows.push([
+            escapeCsv(note.date),
+            escapeCsv(note.type),
+            escapeCsv(note.url),
+            escapeCsv(note.content_text)
+        ].join(','));
+    });
+    
+    const csvContent = csvRows.join('\n');
+    
+    try {
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        const dateStr = new Date().toISOString().slice(0, 10);
+        link.setAttribute('download', `bigquery_release_notes_${dateStr}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        showToast(`Successfully exported ${notesToExport.length} updates to CSV!`);
+    } catch (err) {
+        console.error(err);
+        showToast('Failed to generate CSV file.', 'error');
+    }
+}
+
 // Set up event listeners
 function init() {
     // Refresh button click
@@ -447,6 +518,9 @@ function init() {
     modalBackdrop.addEventListener('click', closeTweetModal);
     tweetTextInput.addEventListener('input', updateCharCount);
     modalShareBtn.addEventListener('click', submitTweet);
+    
+    // Export CSV button click
+    exportCsvBtn.addEventListener('click', exportToCsv);
     
     // Load initial data
     loadNotes();
